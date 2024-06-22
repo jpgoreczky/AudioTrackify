@@ -4,7 +4,7 @@ document.getElementById('upload-form').onsubmit = async function(event) {
     const formData = new FormData();
     formData.append('video', fileInput.files[0]);
     
-    const response = await fetch('/upload', {
+    const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData
     });
