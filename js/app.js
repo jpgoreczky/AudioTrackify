@@ -6,7 +6,10 @@ document.getElementById('upload-form').onsubmit = async function(event) {
     
     const response = await fetch('/api/upload', {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: {
+            'Content-Type': 'multipart/form-data'
+        }
     });
     
     const result = await response.json();
