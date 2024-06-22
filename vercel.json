@@ -10,10 +10,8 @@
       {
         "src": "/api/upload",
         "methods": ["POST"],
-        "dest": "/api/upload.js",
-        "limits": {
-          "maxBodySize": "100mb"
-        }
+        "dest": "/api/upload.js"
+        
       }
     ]
   }
