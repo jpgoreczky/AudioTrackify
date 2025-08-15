@@ -1,27 +1,30 @@
 const ffmpeg = require('fluent-ffmpeg');
-const path = require('path');
+const ffmpegPath = require('ffmpeg-static');
 const ytdl = require('ytdl-core');
+const path = require('path');
 const fs = require('fs-extra');
 const { v4: uuidv4 } = require('uuid');
 
-// Use the new, reliable path for the FFmpeg binary
-const ffmpegPath = path.join(__dirname, '..', 'bin', 'ffmpeg');
-
 // Set the FFmpeg path explicitly for the Vercel environment
+// This part is crucial and should remain
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 class AudioProcessor {
-    /**
-     * Downloads and extracts audio from a given URL.
-     * @param {string} url - The video URL.
-     * @param {string} tempDir - The temporary directory for files.
-     * @returns {Promise<string>} Path to the extracted audio file.
-     */
     async downloadAndExtractAudio(url, tempDir) {
         const audioFilePath = path.join(tempDir, `${uuidv4()}.mp3`);
-
+        
         return new Promise((resolve, reject) => {
             const stream = ytdl(url, { quality: 'highestaudio' });
+
+            // Error handler for the ytdl stream
+            stream.on('error', (err) => {
+                console.error('ytdl stream error:', err);
+                if (err.statusCode === 410) {
+                    reject(new Error('Input video not found or has been removed. Please try a different URL.'));
+                } else {
+                    reject(new Error(`ytdl error: ${err.message}`));
+                }
+            });
 
             ffmpeg(stream)
                 .audioBitrate(128)
