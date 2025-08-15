@@ -1,4 +1,9 @@
 const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+
+// Tell ffmpeg where to find the binary
+ffmpeg.setFfmpegPath(ffmpegPath);
+
 const ytdl = require('ytdl-core');
 const path = require('path');
 const fs = require('fs-extra');
