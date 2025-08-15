@@ -1,6 +1,5 @@
 ﻿const express = require('express');
 const session = require('express-session');
-const multer = require('multer');
 const path = require('path');
 const fs = require('fs-extra');
 const cors = require('cors');
@@ -51,22 +50,6 @@ app.use(session({
 // Serve static files from the 'public' directory
 app.use(express.static('public'));
 
-// --- Multer Configuration ---
-const upload = multer({
-  dest: '/tmp', // Use the /tmp directory for uploads
-  limits: {
-    fileSize: 100 * 1024 * 1024
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /\.(mp4|avi|mov|mkv|webm|flv|wmv|m4v)$/i;
-    if (allowedTypes.test(file.originalname)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only video files are allowed!'));
-    }
-  }
-});
-
 // --- Routes ---
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -75,26 +58,6 @@ app.get('/', (req, res) => {
 app.get('/auth/spotify', spotifyService.initiateAuth.bind(spotifyService));
 app.get('/callback', spotifyService.handleCallback.bind(spotifyService));
 app.get('/auth/status', spotifyService.getAuthStatus.bind(spotifyService));
-
-// File upload route
-app.post('/upload', upload.single('videoFile'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-    const videoPath = req.file.path;
-    const jobId = uuidv4();
-    processVideo(videoPath, jobId, req.file.originalname);
-    res.json({
-      message: 'Video uploaded successfully',
-      jobId: jobId,
-      filename: req.file.originalname
-    });
-  } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: 'Upload failed' });
-  }
-});
 
 app.post('/process-url', async (req, res) => {
   try {
@@ -145,44 +108,6 @@ function getJobStatus(jobId) {
 
 function updateJobStatus(jobId, status, data = {}) {
   jobs.set(jobId, { status, ...data, updatedAt: new Date() });
-}
-
-// --- Video processing logic ---
-async function processVideo(videoPath, jobId, originalName) {
-  try {
-    // Ensure temporary directories exist before processing
-    const tempDir = path.join('/tmp', 'temp');
-    await fs.ensureDir(tempDir);
-
-    updateJobStatus(jobId, 'processing', { 
-      step: 'extracting_audio',
-      filename: originalName 
-    });
-
-    const audioPath = await audioProcessor.extractAudio(videoPath, tempDir);
-    
-    updateJobStatus(jobId, 'processing', { 
-      step: 'identifying_songs',
-      filename: originalName 
-    });
-
-    const identifiedTracks = await songIdentifier.identifyTracks(audioPath);
-
-    await fs.remove(videoPath);
-    await fs.remove(audioPath);
-
-    updateJobStatus(jobId, 'completed', {
-      filename: originalName,
-      tracks: identifiedTracks,
-      totalTracks: identifiedTracks.length
-    });
-  } catch (error) {
-    console.error(`Job ${jobId} failed:`, error);
-    updateJobStatus(jobId, 'failed', {
-      error: error.message,
-      filename: originalName
-    });
-  }
 }
 
 async function processVideoUrl(url, jobId) {

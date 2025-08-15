@@ -13,7 +13,6 @@ class AudioTrackifyApp {
 
     initializeEventListeners() {
         // Form submissions
-        document.getElementById('uploadForm').addEventListener('submit', (e) => this.handleFileUpload(e));
         document.getElementById('urlForm').addEventListener('submit', (e) => this.handleUrlSubmit(e));
         
         // Authentication
