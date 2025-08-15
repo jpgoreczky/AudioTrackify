@@ -13,23 +13,19 @@ const songIdentifier = require('./services/songIdentifier');
 const spotifyService = require('./services/spotifyService');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(express.json()); // Add this for JSON parsing
-app.use(express.urlencoded({ extended: true })); // Add this for URL-encoded bodies
+// --- Middleware ---
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-
     const allowedOrigins = [
-      'https://audio-trackify.vercel.app', // Your production URL
-      'http://localhost:3000', // Your local dev URL
-      'http://127.0.0.1:3000' // Another local dev URL
+      'https://audio-trackify.vercel.app',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000'
     ];
-
     if (allowedOrigins.indexOf(origin) === -1) {
       const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
       return callback(new Error(msg), false);
@@ -41,7 +37,7 @@ app.use(cors({
 
 app.use(cookieParser());
 app.use(session({
-  secret: process.env.SESSION_SECRET,
+  secret: process.env.SESSION_SECRET || 'a-strong-and-unique-secret',
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -52,46 +48,14 @@ app.use(session({
   }
 }));
 
-
-
-// Session configuration
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-fallback-secret-key',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Serve static files from the 'public' directory
 app.use(express.static('public'));
-app.use(express.static(path.join(__dirname, 'public')));
 
-// Create necessary directories
-const uploadsDir = path.join('/tmp', 'uploads');
-const tempDir = path.join('/tmp', 'temp');
-fs.ensureDirSync(uploadsDir);
-fs.ensureDirSync(tempDir);
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir); // This ensures files go to /tmp/uploads
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}-${file.originalname}`;
-    cb(null, uniqueName);
-  }
-});
-
+// --- Multer Configuration ---
 const upload = multer({
-  storage: storage,
+  dest: '/tmp', // Use the /tmp directory for uploads
   limits: {
-    fileSize: 100 * 1024 * 1024 // 100MB limit
+    fileSize: 100 * 1024 * 1024
   },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /\.(mp4|avi|mov|mkv|webm|flv|wmv|m4v)$/i;
@@ -103,12 +67,11 @@ const upload = multer({
   }
 });
 
-// Routes
+// --- Routes ---
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Spotify OAuth routes
 app.get('/auth/spotify', spotifyService.initiateAuth.bind(spotifyService));
 app.get('/callback', spotifyService.handleCallback.bind(spotifyService));
 app.get('/auth/status', spotifyService.getAuthStatus.bind(spotifyService));
@@ -119,13 +82,9 @@ app.post('/upload', upload.single('videoFile'), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
-
     const videoPath = req.file.path;
     const jobId = uuidv4();
-
-    // Process video in background
     processVideo(videoPath, jobId, req.file.originalname);
-
     res.json({
       message: 'Video uploaded successfully',
       jobId: jobId,
@@ -137,19 +96,14 @@ app.post('/upload', upload.single('videoFile'), async (req, res) => {
   }
 });
 
-// URL processing route
 app.post('/process-url', async (req, res) => {
   try {
     const { url } = req.body;
     if (!url) {
       return res.status(400).json({ error: 'URL is required' });
     }
-
     const jobId = uuidv4();
-
-    // Process URL in background
     processVideoUrl(url, jobId);
-
     res.json({
       message: 'URL processing started',
       jobId: jobId,
@@ -161,22 +115,18 @@ app.post('/process-url', async (req, res) => {
   }
 });
 
-// Job status route
 app.get('/status/:jobId', (req, res) => {
   const { jobId } = req.params;
   const status = getJobStatus(jobId);
   res.json(status);
 });
 
-// Create playlist route
 app.post('/create-playlist', async (req, res) => {
   try {
     const { tracks, playlistName } = req.body;
-    
     if (!tracks || !Array.isArray(tracks) || tracks.length === 0) {
       return res.status(400).json({ error: 'No tracks provided' });
     }
-
     const sessionId = req.sessionID || 'default';
     const result = await spotifyService.createPlaylist(tracks, playlistName, sessionId);
     res.json(result);
@@ -186,7 +136,7 @@ app.post('/create-playlist', async (req, res) => {
   }
 });
 
-// In-memory job storage (in production, use Redis or database)
+// --- In-memory job storage ---
 const jobs = new Map();
 
 function getJobStatus(jobId) {
@@ -197,14 +147,18 @@ function updateJobStatus(jobId, status, data = {}) {
   jobs.set(jobId, { status, ...data, updatedAt: new Date() });
 }
 
+// --- Video processing logic ---
 async function processVideo(videoPath, jobId, originalName) {
   try {
+    // Ensure temporary directories exist before processing
+    const tempDir = path.join('/tmp', 'temp');
+    await fs.ensureDir(tempDir);
+
     updateJobStatus(jobId, 'processing', { 
       step: 'extracting_audio',
       filename: originalName 
     });
 
-    // Extract audio from video
     const audioPath = await audioProcessor.extractAudio(videoPath, tempDir);
     
     updateJobStatus(jobId, 'processing', { 
@@ -212,10 +166,8 @@ async function processVideo(videoPath, jobId, originalName) {
       filename: originalName 
     });
 
-    // Identify songs from audio
     const identifiedTracks = await songIdentifier.identifyTracks(audioPath);
 
-    // Clean up files
     await fs.remove(videoPath);
     await fs.remove(audioPath);
 
@@ -224,7 +176,6 @@ async function processVideo(videoPath, jobId, originalName) {
       tracks: identifiedTracks,
       totalTracks: identifiedTracks.length
     });
-
   } catch (error) {
     console.error(`Job ${jobId} failed:`, error);
     updateJobStatus(jobId, 'failed', {
@@ -236,31 +187,24 @@ async function processVideo(videoPath, jobId, originalName) {
 
 async function processVideoUrl(url, jobId) {
   try {
+    const tempDir = path.join('/tmp', 'temp');
+    await fs.ensureDir(tempDir);
     updateJobStatus(jobId, 'processing', { 
       step: 'downloading_video',
       url: url 
     });
-
-    // Download and extract audio from URL
     const audioPath = await audioProcessor.downloadAndExtractAudio(url, tempDir);
-    
     updateJobStatus(jobId, 'processing', { 
       step: 'identifying_songs',
       url: url 
     });
-
-    // Identify songs from audio
     const identifiedTracks = await songIdentifier.identifyTracks(audioPath);
-
-    // Clean up audio file
     await fs.remove(audioPath);
-
     updateJobStatus(jobId, 'completed', {
       url: url,
       tracks: identifiedTracks,
       totalTracks: identifiedTracks.length
     });
-
   } catch (error) {
     console.error(`Job ${jobId} failed:`, error);
     updateJobStatus(jobId, 'failed', {
@@ -270,12 +214,10 @@ async function processVideoUrl(url, jobId) {
   }
 }
 
-// Error handling middleware
+// Global error handling middleware for Multer errors
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File too large' });
-    }
+    return res.status(400).json({ error: error.message });
   }
   res.status(500).json({ error: error.message });
 });
