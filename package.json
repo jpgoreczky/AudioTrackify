@@ -1,0 +1,36 @@
+{
+  "name": "audiotrackify",
+  "version": "1.0.0",
+  "description": "Web app to extract audio from videos, identify songs, and create Spotify playlists",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "ytdl-core": "^4.11.5",
+    "fluent-ffmpeg": "^2.1.2",
+    "acrcloud": "^1.4.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "uuid": "^9.0.1",
+    "path": "^0.12.7",
+    "fs-extra": "^11.1.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "audio",
+    "video",
+    "spotify",
+    "playlist",
+    "song-identification",
+    "acrcloud"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
