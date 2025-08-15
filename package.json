@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "audiotrackify",
   "version": "1.0.0",
   "description": "Web app to extract audio from videos, identify songs, and create Spotify playlists",
@@ -36,6 +36,6 @@
     "song-identification",
     "acrcloud"
   ],
-  "author": "Your Name",
+  "author": "Josie Goreczky",
   "license": "MIT"
 }
