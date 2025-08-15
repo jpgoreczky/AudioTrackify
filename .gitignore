@@ -87,3 +87,6 @@ build/Release
 
 # FFmpeg temporary files
 *.ffmpeg-*
+
+# Backup files
+*.backup

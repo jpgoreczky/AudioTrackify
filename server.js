@@ -5,6 +5,9 @@ const fs = require('fs-extra');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
+
 
 const audioProcessor = require('./services/audioProcessor');
 const songIdentifier = require('./services/songIdentifier');
@@ -15,8 +18,23 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Session middleware
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'fallback-secret',
+  resave: false,
+  saveUninitialized: false,
+  name: 'audiotrackify.sid',
+  cookie: {
+    secure: false, // Set to true in production with HTTPS
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax'
+  }
+}));
 app.use(express.static('public'));
 
 // Create necessary directories
@@ -125,7 +143,7 @@ app.post('/create-playlist', async (req, res) => {
       return res.status(400).json({ error: 'No tracks provided' });
     }
 
-    const result = await spotifyService.createPlaylist(tracks, playlistName);
+    const result = await spotifyService.createPlaylist(req, res, tracks, playlistName);
     res.json(result);
   } catch (error) {
     console.error('Playlist creation error:', error);
