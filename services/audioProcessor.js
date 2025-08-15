@@ -1,9 +1,11 @@
 const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('ffmpeg-static');
-const ytdl = require('ytdl-core');
 const path = require('path');
+const ytdl = require('ytdl-core');
 const fs = require('fs-extra');
 const { v4: uuidv4 } = require('uuid');
+
+// Use the new, reliable path for the FFmpeg binary
+const ffmpegPath = path.join(__dirname, '..', 'bin', 'ffmpeg');
 
 // Set the FFmpeg path explicitly for the Vercel environment
 ffmpeg.setFfmpegPath(ffmpegPath);
@@ -17,7 +19,7 @@ class AudioProcessor {
      */
     async downloadAndExtractAudio(url, tempDir) {
         const audioFilePath = path.join(tempDir, `${uuidv4()}.mp3`);
-        
+
         return new Promise((resolve, reject) => {
             const stream = ytdl(url, { quality: 'highestaudio' });
 

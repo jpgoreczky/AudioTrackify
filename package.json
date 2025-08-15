@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "build": "npm install",
-    "vercel-build": "npm install"
+    "vercel-build": "npm install",
+    "postinstall": "mkdir -p ./bin && cp ./node_modules/ffmpeg-static/ffmpeg ./bin/ffmpeg"
   },
   "dependencies": {
     "acrcloud": "^1.4.0",
