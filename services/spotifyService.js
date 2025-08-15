@@ -96,8 +96,11 @@ class SpotifyService {
    * Exchange authorization code for access token
    */
   async exchangeCodeForToken(code) {
-    const authHeader = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
-    
+  const authHeader = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
+
+  console.log("Attempting to exchange code for token..."); // Add this line
+
+  try {
     const response = await axios.post(this.authUrl, new URLSearchParams({
       grant_type: 'authorization_code',
       code: code,
@@ -109,8 +112,13 @@ class SpotifyService {
       }
     });
 
+    console.log("Token exchange successful."); // And this line
     return response.data;
+  } catch (error) {
+    console.error("Axios request failed:", error.response.status, error.response.data); // Crucial for debugging
+    throw error;
   }
+}
 
   /**
    * Get user information
