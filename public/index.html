@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AudioTrackify - Extract Songs from Videos</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="style.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Navigation -->
+        <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+            <div class="container">
+                <a class="navbar-brand" href="#">
+                    <i class="fas fa-music me-2"></i>AudioTrackify
+                </a>
+                <div class="navbar-nav ms-auto">
+                    <div id="authStatus" class="nav-item">
+                        <button id="spotifyAuthBtn" class="btn btn-success btn-sm">
+                            <i class="fab fa-spotify me-1"></i>Connect Spotify
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container">
+            <!-- Header -->
+            <div class="row mb-5">
+                <div class="col-12 text-center">
+                    <h1 class="display-4 mb-3">
+                        <i class="fas fa-waveform-lines me-3"></i>AudioTrackify
+                    </h1>
+                    <p class="lead">Extract audio from videos, identify songs using ACRCloud, and automatically create Spotify playlists</p>
+                </div>
+            </div>
+
+            <!-- Upload Section -->
+            <div class="row mb-5">
+                <div class="col-lg-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-upload me-2"></i>Upload Video File
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="uploadForm" enctype="multipart/form-data">
+                                <div class="mb-3">
+                                    <label for="videoFile" class="form-label">Select Video File</label>
+                                    <input type="file" class="form-control" id="videoFile" name="videoFile" accept=".mp4,.avi,.mov,.mkv,.webm,.flv,.wmv,.m4v" required>
+                                    <div class="form-text">Supported formats: MP4, AVI, MOV, MKV, WebM, FLV, WMV, M4V (max 100MB)</div>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-cloud-upload-alt me-2"></i>Upload & Process
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-link me-2"></i>Process Video URL
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="urlForm">
+                                <div class="mb-3">
+                                    <label for="videoUrl" class="form-label">Video URL</label>
+                                    <input type="url" class="form-control" id="videoUrl" name="videoUrl" placeholder="https://youtube.com/watch?v=..." required>
+                                    <div class="form-text">Supports YouTube and other video platforms</div>
+                                </div>
+                                <button type="submit" class="btn btn-success w-100">
+                                    <i class="fas fa-play me-2"></i>Process URL
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Section -->
+            <div id="progressSection" class="row mb-5" style="display: none;">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-cog fa-spin me-2"></i>Processing Status
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="progress mb-3">
+                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <div id="progressText" class="text-center">
+                                <p class="mb-0">Initializing...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div id="resultsSection" class="row mb-5" style="display: none;">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-list-music me-2"></i>Identified Tracks
+                            </h5>
+                            <div>
+                                <button id="selectAllBtn" class="btn btn-sm btn-outline-primary me-2">Select All</button>
+                                <button id="createPlaylistBtn" class="btn btn-sm btn-success" disabled>
+                                    <i class="fab fa-spotify me-1"></i>Create Playlist
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="tracksContainer">
+                                <!-- Tracks will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics -->
+            <div id="statsSection" class="row mb-5" style="display: none;">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="card-title mb-0">
+                                <i class="fas fa-chart-pie me-2"></i>Processing Statistics
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3 text-center">
+                                    <div class="stat-card">
+                                        <div class="stat-number" id="totalTracks">0</div>
+                                        <div class="stat-label">Total Identified</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 text-center">
+                                    <div class="stat-card">
+                                        <div class="stat-number" id="spotifyMatches">0</div>
+                                        <div class="stat-label">Spotify Matches</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 text-center">
+                                    <div class="stat-card">
+                                        <div class="stat-number" id="avgConfidence">0%</div>
+                                        <div class="stat-label">Avg Confidence</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 text-center">
+                                    <div class="stat-card">
+                                        <div class="stat-number" id="matchRate">0%</div>
+                                        <div class="stat-label">Match Rate</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Playlist Modal -->
+    <div class="modal fade" id="playlistModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create Spotify Playlist</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="playlistForm">
+                        <div class="mb-3">
+                            <label for="playlistName" class="form-label">Playlist Name</label>
+                            <input type="text" class="form-control" id="playlistName" value="AudioTrackify Playlist" required>
+                        </div>
+                        <div class="mb-3">
+                            <p class="text-muted">
+                                <span id="selectedTracksCount">0</span> tracks selected for playlist creation.
+                            </p>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmCreatePlaylist">
+                        <i class="fab fa-spotify me-1"></i>Create Playlist
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div class="modal fade" id="successModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-check-circle me-2"></i>Success!
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="successContent">
+                        <!-- Success content will be populated here -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <a id="openPlaylistBtn" href="#" class="btn btn-success" target="_blank">
+                        <i class="fab fa-spotify me-1"></i>Open in Spotify
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
