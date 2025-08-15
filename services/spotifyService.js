@@ -9,9 +9,8 @@ class SpotifyService {
     this.baseUrl = 'https://api.spotify.com/v1';
     this.authUrl = 'https://accounts.spotify.com/api/token';
     
-    // In-memory storage for tokens (use Redis/database in production)
+    // In-memory storage for tokens
     this.userTokens = new Map();
-    this.pendingAuth = new Map();
   }
 
   /**
@@ -43,7 +42,8 @@ class SpotifyService {
   initiateAuth(req, res) {
     const state = crypto.randomBytes(16).toString('hex');
     const authUrl = this.generateAuthUrl(state);
-    res.cookie('spotify_auth_state', state, { httpOnly: true, secure: true, sameSite: 'None' });
+    // res.cookie('spotify_auth_state', state, { httpOnly: true, secure: true, sameSite: 'None' });
+    req.session.spotifyAuthState = state;
     res.redirect(authUrl);
   }
 
@@ -52,18 +52,31 @@ class SpotifyService {
    */
   async handleCallback(req, res) {
     const { code, state, error } = req.query;
-    const storedState = req.cookies.spotify_auth_state;
+    // const storedState = req.cookies.spotify_auth_state;
 
+    // Check against the state stored in the session
+    const storedState = req.session.spotifyAuthState;
+
+    // if (error) return res.redirect('/?error=access_denied');
+    // if (!code || !state || state !== storedState) return res.redirect('/?error=invalid_state');
+
+    // res.clearCookie('spotify_auth_state');
+
+    // // Validate state
+    // const authInfo = this.pendingAuth.get(state);
+    // if (!authInfo) {
+    //   return res.redirect('/?error=invalid_state');
+    // }
+    
     if (error) return res.redirect('/?error=access_denied');
-    if (!code || !state || state !== storedState) return res.redirect('/?error=invalid_state');
-
-    res.clearCookie('spotify_auth_state');
-
-    // Validate state
-    const authInfo = this.pendingAuth.get(state);
-    if (!authInfo) {
-      return res.redirect('/?error=invalid_state');
+    if (!code || !state || state !== storedState) {
+        // Clean up session state on failure
+        delete req.session.spotifyAuthState;
+        return res.redirect('/?error=invalid_state');
     }
+
+    // Clean up session state on success
+    delete req.session.spotifyAuthState;
 
     // Clean up state
     this.pendingAuth.delete(state);
