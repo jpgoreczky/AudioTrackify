@@ -43,15 +43,15 @@ app.use(express.static('public'));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Create necessary directories
-const uploadsDir = path.join(__dirname, 'uploads');
-const tempDir = path.join(__dirname, 'temp');
+const uploadsDir = path.join('/tmp', 'uploads');
+const tempDir = path.join('/tmp', 'temp');
 fs.ensureDirSync(uploadsDir);
 fs.ensureDirSync(tempDir);
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadsDir);
+    cb(null, uploadsDir); // This ensures files go to /tmp/uploads
   },
   filename: (req, file, cb) => {
     const uniqueName = `${uuidv4()}-${file.originalname}`;
