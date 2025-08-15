@@ -1,5 +1,5 @@
 const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+const ffmpegPath = require('ffmpeg-static');
 
 // Tell ffmpeg where to find the binary
 ffmpeg.setFfmpegPath(ffmpegPath);
