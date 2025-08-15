@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs-extra');
@@ -226,6 +226,23 @@ app.use((error, req, res, next) => {
   }
   res.status(500).json({ error: error.message });
 });
+
+// Error handling middleware
+app.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'File too large' });
+    }
+  }
+  res.status(500).json({ error: error.message });
+});
+
+// Start server for local development
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(Server running on http://localhost:);
+  });
+}
 
 // Export the app for Vercel serverless handler
 module.exports = app;

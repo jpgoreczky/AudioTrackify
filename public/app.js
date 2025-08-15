@@ -1,4 +1,4 @@
-// AudioTrackify Frontend Application
+// Frontend Application
 class AudioTrackifyApp {
     constructor() {
         this.currentJobId = null;
