@@ -251,8 +251,4 @@ app.use((error, req, res, next) => {
   res.status(500).json({ error: error.message });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
-
 module.exports = app;
