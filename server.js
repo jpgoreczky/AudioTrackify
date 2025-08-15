@@ -16,14 +16,43 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
+app.use(express.json()); // Add this for JSON parsing
+app.use(express.urlencoded({ extended: true })); // Add this for URL-encoded bodies
+
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://audio-trackify.vercel.app']
-    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    const allowedOrigins = [
+      'https://audio-trackify.vercel.app', // Your production URL
+      'http://localhost:3000', // Your local dev URL
+      'http://127.0.0.1:3000' // Another local dev URL
+    ];
+
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
   credentials: true
 }));
 
 app.use(cookieParser());
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000
+  }
+}));
+
+
 
 // Session configuration
 app.use(session({
