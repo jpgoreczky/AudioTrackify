@@ -1,13 +1,12 @@
 ﻿const express = require('express');
+const session = require('express-session');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs-extra');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
-require('dotenv').config();
-const session = require('express-session');
 const cookieParser = require('cookie-parser');
-
+require('dotenv').config();
 
 const audioProcessor = require('./services/audioProcessor');
 const songIdentifier = require('./services/songIdentifier');
@@ -17,24 +16,29 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
-app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://audio-trackify.vercel.app']
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  credentials: true
+}));
 
-// Session middleware
+app.use(cookieParser());
+
+// Session configuration
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'fallback-secret',
+  secret: process.env.SESSION_SECRET || 'your-fallback-secret-key',
   resave: false,
   saveUninitialized: false,
-  name: 'audiotrackify.sid',
   cookie: {
-    secure: false, // Set to true in production with HTTPS
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'lax'
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 // Create necessary directories
@@ -143,7 +147,8 @@ app.post('/create-playlist', async (req, res) => {
       return res.status(400).json({ error: 'No tracks provided' });
     }
 
-    const result = await spotifyService.createPlaylist(req, res, tracks, playlistName);
+    const sessionId = req.sessionID || 'default';
+    const result = await spotifyService.createPlaylist(tracks, playlistName, sessionId);
     res.json(result);
   } catch (error) {
     console.error('Playlist creation error:', error);
@@ -245,22 +250,8 @@ app.use((error, req, res, next) => {
   res.status(500).json({ error: error.message });
 });
 
-// Error handling middleware
-app.use((error, req, res, next) => {
-  if (error instanceof multer.MulterError) {
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File too large' });
-    }
-  }
-  res.status(500).json({ error: error.message });
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });
 
-// Start server for local development
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(Server running on http://localhost:);
-  });
-}
-
-// Export the app for Vercel serverless handler
 module.exports = app;

@@ -1,6 +1,5 @@
 ﻿const axios = require('axios');
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
 
 class SpotifyService {
   constructor() {
@@ -9,7 +8,10 @@ class SpotifyService {
     this.redirectUri = process.env.SPOTIFY_REDIRECT_URI;
     this.baseUrl = 'https://api.spotify.com/v1';
     this.authUrl = 'https://accounts.spotify.com/api/token';
-    this.jwtSecret = process.env.SESSION_SECRET || 'fallback-secret';
+    
+    // In-memory storage for tokens (use Redis/database in production)
+    this.userTokens = new Map();
+    this.pendingAuth = new Map();
   }
 
   /**
@@ -32,7 +34,7 @@ class SpotifyService {
       show_dialog: 'true'
     });
 
-    return https://accounts.spotify.com/authorize?;
+    return `https://accounts.spotify.com/authorize?${params.toString()}`;
   }
 
   /**
@@ -41,15 +43,7 @@ class SpotifyService {
   initiateAuth(req, res) {
     const state = crypto.randomBytes(16).toString('hex');
     const authUrl = this.generateAuthUrl(state);
-    
-    // Store state in cookie for validation
-    res.cookie('spotify_state', state, { 
-      httpOnly: true, 
-      maxAge: 10 * 60 * 1000, // 10 minutes
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax'
-    });
-
+    res.cookie('spotify_auth_state', state, { httpOnly: true, secure: true, sameSite: 'None' });
     res.redirect(authUrl);
   }
 
@@ -58,20 +52,21 @@ class SpotifyService {
    */
   async handleCallback(req, res) {
     const { code, state, error } = req.query;
-    const storedState = req.cookies.spotify_state;
+    const storedState = req.cookies.spotify_auth_state;
 
-    if (error) {
-      res.clearCookie('spotify_state');
-      return res.redirect('/?error=access_denied');
+    if (error) return res.redirect('/?error=access_denied');
+    if (!code || !state || state !== storedState) return res.redirect('/?error=invalid_state');
+
+    res.clearCookie('spotify_auth_state');
+
+    // Validate state
+    const authInfo = this.pendingAuth.get(state);
+    if (!authInfo) {
+      return res.redirect('/?error=invalid_state');
     }
 
-    if (!code || !state || !storedState || state !== storedState) {
-      res.clearCookie('spotify_state');
-      return res.redirect('/?error=invalid_request');
-    }
-
-    // Clear state cookie
-    res.clearCookie('spotify_state');
+    // Clean up state
+    this.pendingAuth.delete(state);
 
     try {
       // Exchange code for access token
@@ -80,22 +75,14 @@ class SpotifyService {
       // Get user info
       const userInfo = await this.getUserInfo(tokenData.access_token);
       
-      // Create JWT token with user data
-      const userToken = jwt.sign({
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
-        expires_at: Date.now() + (tokenData.expires_in * 1000),
+      // Store tokens
+      const sessionId = req.sessionID || 'default';
+      this.userTokens.set(sessionId, {
+        ...tokenData,
         userId: userInfo.id,
         displayName: userInfo.display_name,
-        email: userInfo.email
-      }, this.jwtSecret, { expiresIn: '7d' });
-
-      // Store token in secure cookie
-      res.cookie('spotify_token', userToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        sameSite: 'lax'
+        email: userInfo.email,
+        timestamp: Date.now()
       });
 
       res.redirect('/?auth=success');
@@ -109,7 +96,7 @@ class SpotifyService {
    * Exchange authorization code for access token
    */
   async exchangeCodeForToken(code) {
-    const authHeader = Buffer.from(${this.clientId}:).toString('base64');
+    const authHeader = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
     
     const response = await axios.post(this.authUrl, new URLSearchParams({
       grant_type: 'authorization_code',
@@ -117,7 +104,7 @@ class SpotifyService {
       redirect_uri: this.redirectUri
     }), {
       headers: {
-        'Authorization': Basic ,
+        'Authorization': `Basic ${authHeader}`,
         'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
@@ -129,9 +116,9 @@ class SpotifyService {
    * Get user information
    */
   async getUserInfo(accessToken) {
-    const response = await axios.get(${this.baseUrl}/me, {
+    const response = await axios.get(`${this.baseUrl}/me`, {
       headers: {
-        'Authorization': Bearer 
+        'Authorization': `Bearer ${accessToken}`
       }
     });
 
@@ -139,108 +126,117 @@ class SpotifyService {
   }
 
   /**
-   * Get authentication status from cookie
+   * Get authentication status
    */
   getAuthStatus(req, res) {
-    const token = req.cookies.spotify_token;
+    const sessionId = req.sessionID || 'default';
+    const tokenData = this.userTokens.get(sessionId);
 
-    if (!token) {
-      return res.json({ authenticated: false });
-    }
-
-    try {
-      const decoded = jwt.verify(token, this.jwtSecret);
+    if (tokenData) {
       res.json({
         authenticated: true,
         user: {
-          id: decoded.userId,
-          displayName: decoded.displayName,
-          email: decoded.email
+          id: tokenData.userId,
+          displayName: tokenData.displayName,
+          email: tokenData.email
         }
       });
-    } catch (error) {
-      // Token is invalid or expired
-      res.clearCookie('spotify_token');
-      res.json({ authenticated: false });
-    }
-  }
-
-  /**
-   * Get user data from cookie
-   */
-  getUserFromCookie(req) {
-    const token = req.cookies.spotify_token;
-    if (!token) {
-      throw new Error('User not authenticated');
-    }
-
-    try {
-      return jwt.verify(token, this.jwtSecret);
-    } catch (error) {
-      throw new Error('Invalid or expired token');
+    } else {
+      res.json({
+        authenticated: false
+      });
     }
   }
 
   /**
    * Refresh access token
    */
-  async refreshAccessToken(refreshToken) {
-    const authHeader = Buffer.from(${this.clientId}:).toString('base64');
+  async refreshAccessToken(sessionId) {
+    const tokenData = this.userTokens.get(sessionId);
+    if (!tokenData || !tokenData.refresh_token) {
+      throw new Error('No refresh token available');
+    }
+
+    const authHeader = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
     
     const response = await axios.post(this.authUrl, new URLSearchParams({
       grant_type: 'refresh_token',
-      refresh_token: refreshToken
+      refresh_token: tokenData.refresh_token
     }), {
       headers: {
-        'Authorization': Basic ,
+        'Authorization': `Basic ${authHeader}`,
         'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
 
-    return response.data;
+    // Update stored tokens
+    const newTokenData = {
+      ...tokenData,
+      ...response.data,
+      timestamp: Date.now()
+    };
+    
+    this.userTokens.set(sessionId, newTokenData);
+    return newTokenData;
   }
 
   /**
    * Get valid access token (refresh if needed)
    */
-  async getValidAccessToken(req, res) {
-    const userData = this.getUserFromCookie(req);
+  async getValidAccessToken(sessionId) {
+    let tokenData = this.userTokens.get(sessionId);
     
-    // Check if token is expired (with 5 minute buffer)
-    const expiresAt = userData.expires_at - (5 * 60 * 1000);
-    
-    if (Date.now() > expiresAt) {
-      // Refresh token
-      const newTokenData = await this.refreshAccessToken(userData.refresh_token);
-      
-      // Update cookie with new token data
-      const updatedUserToken = jwt.sign({
-        ...userData,
-        access_token: newTokenData.access_token,
-        expires_at: Date.now() + (newTokenData.expires_in * 1000)
-      }, this.jwtSecret, { expiresIn: '7d' });
-
-      res.cookie('spotify_token', updatedUserToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        sameSite: 'lax'
-      });
-
-      return newTokenData.access_token;
+    if (!tokenData) {
+      throw new Error('User not authenticated');
     }
 
-    return userData.access_token;
+    // Check if token is expired (with 5 minute buffer)
+    const expiresAt = tokenData.timestamp + (tokenData.expires_in * 1000) - (5 * 60 * 1000);
+    
+    if (Date.now() > expiresAt) {
+      tokenData = await this.refreshAccessToken(sessionId);
+    }
+
+    return tokenData.access_token;
+  }
+
+  /**
+   * Search for tracks on Spotify
+   */
+  async searchTracks(query, limit = 10, sessionId = 'default') {
+    try {
+      const accessToken = await this.getValidAccessToken(sessionId);
+      
+      const response = await axios.get(`${this.baseUrl}/search`, {
+        params: {
+          q: query,
+          type: 'track',
+          limit: limit
+        },
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+
+      return response.data.tracks.items;
+    } catch (error) {
+      console.error('Error searching tracks:', error);
+      throw error;
+    }
   }
 
   /**
    * Create a new playlist
    */
-  async createPlaylist(req, res, tracks, playlistName = 'AudioTrackify Playlist') {
+  async createPlaylist(tracks, playlistName = 'AudioTrackify Playlist', sessionId = 'default') {
     try {
-      const accessToken = await this.getValidAccessToken(req, res);
-      const userData = this.getUserFromCookie(req);
+      const accessToken = await this.getValidAccessToken(sessionId);
+      const tokenData = this.userTokens.get(sessionId);
       
+      if (!tokenData) {
+        throw new Error('User not authenticated');
+      }
+
       // Filter tracks that have Spotify IDs
       const spotifyTracks = tracks.filter(track => track.spotify && track.spotify.id);
       
@@ -249,13 +245,13 @@ class SpotifyService {
       }
 
       // Create playlist
-      const playlistResponse = await axios.post(${this.baseUrl}/users//playlists, {
+      const playlistResponse = await axios.post(`${this.baseUrl}/users/${tokenData.userId}/playlists`, {
         name: playlistName,
-        description: Playlist created by AudioTrackify -  tracks identified from your audio,
+        description: `Playlist created by AudioTrackify - ${spotifyTracks.length} tracks identified from your audio`,
         public: false
       }, {
         headers: {
-          'Authorization': Bearer ,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         }
       });
@@ -269,11 +265,11 @@ class SpotifyService {
       for (let i = 0; i < trackUris.length; i += batchSize) {
         const batch = trackUris.slice(i, i + batchSize);
         
-        await axios.post(${this.baseUrl}/playlists//tracks, {
+        await axios.post(`${this.baseUrl}/playlists/${playlist.id}/tracks`, {
           uris: batch
         }, {
           headers: {
-            'Authorization': Bearer ,
+            'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json'
           }
         });
@@ -293,6 +289,72 @@ class SpotifyService {
 
     } catch (error) {
       console.error('Error creating playlist:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user's playlists
+   */
+  async getUserPlaylists(sessionId = 'default') {
+    try {
+      const accessToken = await this.getValidAccessToken(sessionId);
+      
+      const response = await axios.get(`${this.baseUrl}/me/playlists`, {
+        params: {
+          limit: 50
+        },
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+
+      return response.data.items;
+    } catch (error) {
+      console.error('Error fetching playlists:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Add tracks to existing playlist
+   */
+  async addTracksToPlaylist(playlistId, tracks, sessionId = 'default') {
+    try {
+      const accessToken = await this.getValidAccessToken(sessionId);
+      
+      // Filter tracks that have Spotify IDs
+      const spotifyTracks = tracks.filter(track => track.spotify && track.spotify.id);
+      const trackUris = spotifyTracks.map(track => track.spotify.uri);
+      
+      if (trackUris.length === 0) {
+        throw new Error('No tracks with Spotify matches found');
+      }
+
+      // Add tracks in batches
+      const batchSize = 100;
+      
+      for (let i = 0; i < trackUris.length; i += batchSize) {
+        const batch = trackUris.slice(i, i + batchSize);
+        
+        await axios.post(`${this.baseUrl}/playlists/${playlistId}/tracks`, {
+          uris: batch
+        }, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+
+      return {
+        addedTracks: spotifyTracks.length,
+        totalTracks: tracks.length,
+        skippedTracks: tracks.length - spotifyTracks.length
+      };
+
+    } catch (error) {
+      console.error('Error adding tracks to playlist:', error);
       throw error;
     }
   }
