@@ -80,9 +80,9 @@ app.get('/', (req, res) => {
 });
 
 // Spotify OAuth routes
-app.get('/auth/spotify', spotifyService.initiateAuth);
-app.get('/callback', spotifyService.handleCallback);
-app.get('/auth/status', spotifyService.getAuthStatus);
+app.get('/auth/spotify', spotifyService.initiateAuth.bind(spotifyService));
+app.get('/callback', spotifyService.handleCallback.bind(spotifyService));
+app.get('/auth/status', spotifyService.getAuthStatus.bind(spotifyService));
 
 // File upload route
 app.post('/upload', upload.single('videoFile'), async (req, res) => {
