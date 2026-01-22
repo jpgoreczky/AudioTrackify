@@ -9,21 +9,39 @@ const { v4: uuidv4 } = require('uuid');
 // This part is crucial and should remain
 ffmpeg.setFfmpegPath(ffmpegPath);
 
-// Create an agent to use cookies if available
-let agent;
-try {
-    // Try to use cookies from environment variable or file if available
-    const cookiesPath = process.env.YOUTUBE_COOKIES_PATH || path.join(__dirname, '..', 'youtube-cookies.txt');
-    if (fs.existsSync(cookiesPath)) {
-        const cookiesContent = fs.readFileSync(cookiesPath, 'utf8');
-        console.log('[AudioProcessor] Using YouTube cookies for authentication');
-        // Note: @distube/ytdl-core can use cookies directly in options
-    }
-} catch (err) {
-    console.log('[AudioProcessor] No YouTube cookies found, continuing without authentication');
-}
-
 class AudioProcessor {
+    // Load and validate YouTube cookies if available
+    _loadYouTubeCookies() {
+        const cookiesPath = process.env.YOUTUBE_COOKIES_PATH || path.join(__dirname, '..', 'youtube-cookies.txt');
+        
+        if (!fs.existsSync(cookiesPath)) {
+            return null;
+        }
+        
+        try {
+            const cookiesContent = fs.readFileSync(cookiesPath, 'utf8').trim();
+            
+            // Basic validation: check if it's not empty and looks like cookie format
+            if (!cookiesContent || cookiesContent.length === 0) {
+                console.warn('[AudioProcessor] Cookie file is empty');
+                return null;
+            }
+            
+            // Sanitize: remove any potential header injection characters
+            const sanitized = cookiesContent
+                .split('\n')
+                .filter(line => !line.includes('\r') && !line.includes('\n\n'))
+                .join('; ')
+                .trim();
+            
+            console.log('[AudioProcessor] Using YouTube cookies for authentication');
+            return sanitized;
+        } catch (err) {
+            console.warn('[AudioProcessor] Failed to load YouTube cookies:', err.message);
+            return null;
+        }
+    }
+
     async downloadAndExtractAudio(url, tempDir) {
         const audioFilePath = path.join(tempDir, `${uuidv4()}.mp3`);
         
@@ -58,11 +76,12 @@ class AudioProcessor {
             };
 
             // Add cookies if available
-            const cookiesPath = process.env.YOUTUBE_COOKIES_PATH || path.join(__dirname, '..', 'youtube-cookies.txt');
-            if (fs.existsSync(cookiesPath)) {
-                const cookiesContent = fs.readFileSync(cookiesPath, 'utf8');
-                ytdlOptions.requestOptions.headers.Cookie = cookiesContent.trim();
+            const cookies = this._loadYouTubeCookies();
+            if (cookies) {
+                ytdlOptions.requestOptions.headers.Cookie = cookies;
                 console.log('[AudioProcessor] Using cookies for request');
+            } else {
+                console.log('[AudioProcessor] No YouTube cookies available - may encounter bot detection');
             }
             
             // Get video info first to verify access
