@@ -59,7 +59,7 @@ class AudioProcessor {
             
             // Execute yt-dlp
             try {
-                const output = await ytDlpExec(url, ytDlpOptions);
+                await ytDlpExec(url, ytDlpOptions);
                 console.log('[AudioProcessor] yt-dlp execution completed');
                 
                 // Find the output file (yt-dlp adds .mp3 extension)
@@ -80,7 +80,7 @@ class AudioProcessor {
                 });
                 
                 // Enhanced error messages
-                const errorMessage = execError.message + (execError.stderr || '');
+                const errorMessage = execError.message + (execError.stderr ? ' ' + execError.stderr : '');
                 
                 if (errorMessage.includes('Sign in to confirm')) {
                     throw new Error('YouTube requires sign-in verification. Please set up YouTube cookies (see README) or try a different video.');
