@@ -21,18 +21,28 @@ class AudioProcessor {
         try {
             const cookiesContent = fs.readFileSync(cookiesPath, 'utf8').trim();
             
-            // Basic validation: check if it's not empty and looks like cookie format
+            // Basic validation: check if it's not empty
             if (!cookiesContent || cookiesContent.length === 0) {
                 console.warn('[AudioProcessor] Cookie file is empty');
                 return null;
             }
             
             // Sanitize: remove any potential header injection characters
+            // Only allow valid cookie characters (alphanumeric, spaces, hyphens, underscores, equals, semicolons)
             const sanitized = cookiesContent
-                .split('\n')
-                .filter(line => !line.includes('\r') && !line.includes('\n\n'))
-                .join('; ')
-                .trim();
+                .replace(/[\r\n\0]/g, '') // Remove carriage return, newline, and null bytes
+                .split(';')
+                .map(cookie => cookie.trim())
+                .filter(cookie => {
+                    // Only keep cookies that match valid format: key=value
+                    return /^[a-zA-Z0-9_-]+=.+$/.test(cookie);
+                })
+                .join('; ');
+            
+            if (!sanitized) {
+                console.warn('[AudioProcessor] No valid cookies found after sanitization');
+                return null;
+            }
             
             console.log('[AudioProcessor] Using YouTube cookies for authentication');
             return sanitized;
