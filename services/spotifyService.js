@@ -81,6 +81,10 @@ class SpotifyService {
       // Get user info
       const userInfo = await this.getUserInfo(tokenData.access_token);
       
+      // Mark session as authenticated to ensure session gets created/saved
+      // This ensures sessionID remains consistent across requests
+      req.session.spotifyUserId = userInfo.id;
+      
       // Store tokens using sessionID as key
       const sessionId = req.sessionID || 'default';
       this.userTokens.set(sessionId, {

@@ -31,7 +31,8 @@ class AudioTrackifyApp {
         
         if (urlParams.get('auth') === 'success') {
             this.showAlert('Successfully connected to Spotify!', 'success');
-            this.checkAuthStatus();
+            // Add small delay to ensure session cookie is set before checking auth
+            setTimeout(() => this.checkAuthStatus(), 100);
             // Clean URL
             window.history.replaceState({}, document.title, window.location.pathname);
         } else if (urlParams.has('error')) {
