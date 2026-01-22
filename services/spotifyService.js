@@ -118,7 +118,7 @@ class SpotifyService {
    * Get base URL from redirect URI or request
    */
   getBaseUrl(req) {
-    // First try to extract from redirect URI
+    // First try to extract from redirect URI (most secure)
     if (this.redirectUri) {
       try {
         const url = new URL(this.redirectUri);
@@ -128,9 +128,17 @@ class SpotifyService {
       }
     }
     
-    // Fallback to constructing from request
+    // Fallback to constructing from request headers
     const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
     const host = req.headers['x-forwarded-host'] || req.headers.host;
+    
+    // Validate host exists
+    if (!host) {
+      console.error('No host header found in request');
+      // Use a safe fallback - this should never happen in production
+      return 'http://localhost:3000';
+    }
+    
     return `${protocol}://${host}`;
   }
 
