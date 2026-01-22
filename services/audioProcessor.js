@@ -46,6 +46,8 @@ class AudioProcessor {
             });
 
             return new Promise((resolve, reject) => {
+                let lastLoggedPercent = 0;
+                
                 // Error handler for the ytdl stream
                 stream.on('error', (err) => {
                     console.error('[AudioProcessor] ytdl stream error:', {
@@ -62,15 +64,20 @@ class AudioProcessor {
                     }
                 });
                 
-                // Log when download starts
+                // Log download progress (throttled to every 10%)
                 stream.on('progress', (chunkLength, downloaded, total) => {
                     if (total > 0) {
-                        const percent = ((downloaded / total) * 100).toFixed(2);
-                        console.log('[AudioProcessor] Download progress:', percent + '%');
+                        const percent = Math.floor((downloaded / total) * 100);
+                        if (percent >= lastLoggedPercent + 10 || percent === 100) {
+                            console.log('[AudioProcessor] Download progress:', percent + '%');
+                            lastLoggedPercent = percent;
+                        }
                     }
                 });
 
                 console.log('[AudioProcessor] Starting FFmpeg conversion...');
+                let lastLoggedFfmpegPercent = 0;
+                
                 ffmpeg(stream)
                     .audioBitrate(128)
                     .save(audioFilePath)
@@ -78,7 +85,14 @@ class AudioProcessor {
                         console.log('[AudioProcessor] FFmpeg command:', commandLine);
                     })
                     .on('progress', (progress) => {
-                        console.log('[AudioProcessor] FFmpeg progress:', progress.percent ? progress.percent.toFixed(2) + '%' : 'processing...');
+                        // Log FFmpeg progress (throttled to every 10%)
+                        if (progress.percent) {
+                            const percent = Math.floor(progress.percent);
+                            if (percent >= lastLoggedFfmpegPercent + 10 || percent >= 99) {
+                                console.log('[AudioProcessor] FFmpeg progress:', percent + '%');
+                                lastLoggedFfmpegPercent = percent;
+                            }
+                        }
                     })
                     .on('end', () => {
                         console.log('[AudioProcessor] FFmpeg conversion completed successfully');
