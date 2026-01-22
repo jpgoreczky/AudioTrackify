@@ -57,7 +57,7 @@ class AudioProcessor {
                     });
                     if (err.statusCode === 410) {
                         reject(new Error('Input video not found or has been removed. Please try a different URL.'));
-                    } else if (err.message.includes('429') || err.message.includes('Too Many Requests')) {
+                    } else if (err.statusCode === 429 || err.message.includes('Too Many Requests')) {
                         reject(new Error('YouTube is rate limiting requests. Please try again in a few minutes.'));
                     } else {
                         reject(new Error(`Failed to download video: ${err.message}`));
@@ -66,7 +66,7 @@ class AudioProcessor {
                 
                 // Log download progress (throttled to every 10%)
                 stream.on('progress', (chunkLength, downloaded, total) => {
-                    if (total > 0) {
+                    if (total && typeof total === 'number' && total > 0) {
                         const percent = Math.floor((downloaded / total) * 100);
                         if (percent >= lastLoggedPercent + 10 || percent === 100) {
                             console.log('[AudioProcessor] Download progress:', percent + '%');
