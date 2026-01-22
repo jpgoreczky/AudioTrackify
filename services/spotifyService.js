@@ -81,6 +81,11 @@ class SpotifyService {
       // Get user info
       const userInfo = await this.getUserInfo(tokenData.access_token);
       
+      // Initialize session if needed
+      if (!req.session.initialized) {
+        req.session.initialized = true;
+      }
+      
       // Store tokens
       const sessionId = req.sessionID || 'default';
       this.userTokens.set(sessionId, {
@@ -91,7 +96,14 @@ class SpotifyService {
         timestamp: Date.now()
       });
 
-      res.redirect('/?auth=success');
+      // Save session before redirecting to ensure sessionID is consistent
+      req.session.save((err) => {
+        if (err) {
+          console.error('Session save error:', err);
+          return res.redirect('/?error=session_error');
+        }
+        res.redirect('/?auth=success');
+      });
     } catch (error) {
       console.error('OAuth callback error:', error);
       res.redirect('/?error=auth_failed');
