@@ -1,6 +1,6 @@
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('ffmpeg-static');
-const ytdl = require('@distube/ytdl-core');
+const YTDlpWrap = require('yt-dlp-wrap').default;
 const path = require('path');
 const fs = require('fs-extra');
 const { v4: uuidv4 } = require('uuid');
@@ -10,191 +10,138 @@ const { v4: uuidv4 } = require('uuid');
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 class AudioProcessor {
-    // Load and validate YouTube cookies if available
-    _loadYouTubeCookies() {
+    constructor() {
+        // Initialize yt-dlp wrapper
+        this.ytDlp = new YTDlpWrap();
+    }
+
+    // Load YouTube cookies path if available
+    _getYouTubeCookiesPath() {
         const cookiesPath = process.env.YOUTUBE_COOKIES_PATH || path.join(__dirname, '..', 'youtube-cookies.txt');
         
-        if (!fs.existsSync(cookiesPath)) {
-            return null;
+        if (fs.existsSync(cookiesPath)) {
+            console.log('[AudioProcessor] Found YouTube cookies file at:', cookiesPath);
+            return cookiesPath;
         }
         
-        try {
-            const cookiesContent = fs.readFileSync(cookiesPath, 'utf8').trim();
-            
-            // Basic validation: check if it's not empty
-            if (!cookiesContent || cookiesContent.length === 0) {
-                console.warn('[AudioProcessor] Cookie file is empty');
-                return null;
-            }
-            
-            // Sanitize: remove any potential header injection characters
-            // Only allow valid cookie characters (alphanumeric, spaces, hyphens, underscores, equals, semicolons)
-            const sanitized = cookiesContent
-                .replace(/[\r\n\0]/g, '') // Remove carriage return, newline, and null bytes
-                .split(';')
-                .map(cookie => cookie.trim())
-                .filter(cookie => {
-                    // Only keep cookies that match valid format: key=value
-                    return /^[a-zA-Z0-9_-]+=.+$/.test(cookie);
-                })
-                .join('; ');
-            
-            if (!sanitized) {
-                console.warn('[AudioProcessor] No valid cookies found after sanitization');
-                return null;
-            }
-            
-            console.log('[AudioProcessor] Using YouTube cookies for authentication');
-            return sanitized;
-        } catch (err) {
-            console.warn('[AudioProcessor] Failed to load YouTube cookies:', err.message);
-            return null;
-        }
+        console.log('[AudioProcessor] No YouTube cookies file found - may encounter bot detection');
+        return null;
     }
 
     async downloadAndExtractAudio(url, tempDir) {
         const audioFilePath = path.join(tempDir, `${uuidv4()}.mp3`);
+        const tempVideoPath = path.join(tempDir, `${uuidv4()}.temp`);
         
         console.log('[AudioProcessor] Starting download for URL:', url);
         
-        // Validate URL first
-        if (!ytdl.validateURL(url)) {
-            console.error('[AudioProcessor] Invalid YouTube URL:', url);
-            throw new Error('Invalid YouTube URL. Please provide a valid YouTube video URL.');
-        }
-        
-        console.log('[AudioProcessor] URL validation passed');
-        
         try {
-            // Enhanced options to bypass bot detection
-            const ytdlOptions = {
-                requestOptions: {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                        'Accept-Language': 'en-US,en;q=0.9',
-                        'Accept-Encoding': 'gzip, deflate, br',
-                        'Connection': 'keep-alive',
-                        'Upgrade-Insecure-Requests': '1',
-                        'Sec-Fetch-Dest': 'document',
-                        'Sec-Fetch-Mode': 'navigate',
-                        'Sec-Fetch-Site': 'none',
-                        'Sec-Fetch-User': '?1',
-                        'Cache-Control': 'max-age=0'
-                    }
-                }
-            };
+            // Build yt-dlp options
+            const ytDlpOptions = [
+                '--extract-audio',
+                '--audio-format', 'mp3',
+                '--audio-quality', '128K',
+                '--output', tempVideoPath,
+                '--no-playlist',
+                '--no-warnings',
+                '--no-check-certificate',
+                '--prefer-insecure',
+                '--add-header', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                '--add-header', 'Accept:text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                '--add-header', 'Accept-Language:en-US,en;q=0.9',
+                '--add-header', 'Sec-Fetch-Dest:document',
+                '--add-header', 'Sec-Fetch-Mode:navigate',
+                '--add-header', 'Sec-Fetch-Site:none',
+                '--no-check-formats'
+            ];
 
             // Add cookies if available
-            const cookies = this._loadYouTubeCookies();
-            if (cookies) {
-                ytdlOptions.requestOptions.headers.Cookie = cookies;
-                console.log('[AudioProcessor] Using cookies for request');
-            } else {
-                console.log('[AudioProcessor] No YouTube cookies available - may encounter bot detection');
+            const cookiesPath = this._getYouTubeCookiesPath();
+            if (cookiesPath) {
+                ytDlpOptions.push('--cookies', cookiesPath);
+                console.log('[AudioProcessor] Using cookies for authentication');
             }
-            
-            // Get video info first to verify access
-            console.log('[AudioProcessor] Fetching video info...');
-            const info = await ytdl.getInfo(url, ytdlOptions);
-            console.log('[AudioProcessor] Video info retrieved:', {
-                title: info.videoDetails.title,
-                lengthSeconds: info.videoDetails.lengthSeconds,
-                author: info.videoDetails.author.name
-            });
-            
-            // Create download stream with enhanced options
-            console.log('[AudioProcessor] Creating download stream...');
-            const streamOptions = {
-                ...ytdlOptions,
-                quality: 'highestaudio',
-                filter: 'audioonly'
-            };
-            
-            const stream = ytdl(url, streamOptions);
 
-            return new Promise((resolve, reject) => {
-                let lastLoggedPercent = 0;
+            ytDlpOptions.push(url);
+
+            console.log('[AudioProcessor] Executing yt-dlp with options');
+            
+            // Execute yt-dlp
+            await new Promise((resolve, reject) => {
+                const ytDlpProcess = this.ytDlp.exec(ytDlpOptions);
                 
-                // Error handler for the ytdl stream
-                stream.on('error', (err) => {
-                    console.error('[AudioProcessor] ytdl stream error:', {
-                        message: err.message,
-                        statusCode: err.statusCode,
-                        stack: err.stack
+                let lastProgress = 0;
+                
+                ytDlpProcess.on('progress', (progress) => {
+                    if (progress.percent) {
+                        const percent = Math.floor(progress.percent);
+                        if (percent >= lastProgress + 10 || percent >= 99) {
+                            console.log('[AudioProcessor] Download progress:', percent + '%');
+                            lastProgress = percent;
+                        }
+                    }
+                });
+                
+                ytDlpProcess.on('ytDlpEvent', (eventType, eventData) => {
+                    if (eventType === 'info') {
+                        console.log('[AudioProcessor] Video info:', eventData);
+                    }
+                });
+                
+                ytDlpProcess.on('error', (error) => {
+                    console.error('[AudioProcessor] yt-dlp error:', {
+                        message: error.message,
+                        stack: error.stack
                     });
                     
-                    // Enhanced error messages for bot detection
-                    if (err.statusCode === 410) {
-                        reject(new Error('YouTube detected automated access. This may be due to: 1) Cloud server IP being blocked, 2) Missing YouTube cookies. See README for cookie setup instructions.'));
-                    } else if (err.statusCode === 429 || err.message.includes('Too Many Requests')) {
-                        reject(new Error('YouTube is rate limiting requests. Please try again in a few minutes or set up YouTube cookies for authentication.'));
-                    } else if (err.message.includes('Sign in to confirm')) {
+                    // Enhanced error messages
+                    if (error.message.includes('Sign in to confirm')) {
                         reject(new Error('YouTube requires sign-in verification. Please set up YouTube cookies (see README) or try a different video.'));
+                    } else if (error.message.includes('Video unavailable')) {
+                        reject(new Error('Input video not found or has been removed. Please try a different URL.'));
+                    } else if (error.message.includes('age')) {
+                        reject(new Error('This video is age-restricted and cannot be processed.'));
+                    } else if (error.message.includes('private')) {
+                        reject(new Error('This video is private and cannot be accessed.'));
+                    } else if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
+                        reject(new Error('YouTube is rate limiting requests. Please try again in a few minutes.'));
                     } else {
-                        reject(new Error(`Failed to download video: ${err.message}`));
+                        reject(new Error(`Failed to download video: ${error.message}`));
                     }
                 });
                 
-                // Log download progress (throttled to every 10%)
-                stream.on('progress', (chunkLength, downloaded, total) => {
-                    if (total && typeof total === 'number' && total > 0) {
-                        const percent = Math.floor((downloaded / total) * 100);
-                        if (percent >= lastLoggedPercent + 10 || percent === 100) {
-                            console.log('[AudioProcessor] Download progress:', percent + '%');
-                            lastLoggedPercent = percent;
-                        }
-                    }
-                });
-
-                console.log('[AudioProcessor] Starting FFmpeg conversion...');
-                let lastLoggedFfmpegPercent = 0;
-                
-                ffmpeg(stream)
-                    .audioBitrate(128)
-                    .save(audioFilePath)
-                    .on('start', (commandLine) => {
-                        console.log('[AudioProcessor] FFmpeg command:', commandLine);
-                    })
-                    .on('progress', (progress) => {
-                        // Log FFmpeg progress (throttled to every 10%)
-                        if (progress.percent) {
-                            const percent = Math.floor(progress.percent);
-                            if (percent >= lastLoggedFfmpegPercent + 10 || percent >= 99) {
-                                console.log('[AudioProcessor] FFmpeg progress:', percent + '%');
-                                lastLoggedFfmpegPercent = percent;
-                            }
-                        }
-                    })
-                    .on('end', () => {
-                        console.log('[AudioProcessor] FFmpeg conversion completed successfully');
+                ytDlpProcess.on('close', () => {
+                    console.log('[AudioProcessor] yt-dlp download completed');
+                    
+                    // Find the output file (yt-dlp adds .mp3 extension)
+                    const outputFile = tempVideoPath + '.mp3';
+                    
+                    if (fs.existsSync(outputFile)) {
+                        // Move to final location
+                        fs.moveSync(outputFile, audioFilePath, { overwrite: true });
                         console.log('[AudioProcessor] Audio file saved to:', audioFilePath);
                         resolve(audioFilePath);
-                    })
-                    .on('error', (err) => {
-                        console.error('[AudioProcessor] FFmpeg error:', {
-                            message: err.message,
-                            stack: err.stack
-                        });
-                        reject(new Error(`Audio conversion failed: ${err.message}`));
-                    });
+                    } else {
+                        reject(new Error('yt-dlp completed but output file not found'));
+                    }
+                });
             });
+
+            return audioFilePath;
         } catch (err) {
             console.error('[AudioProcessor] Error in downloadAndExtractAudio:', {
                 message: err.message,
                 stack: err.stack
             });
-            if (err.message.includes('Video unavailable')) {
-                throw new Error('Input video not found or has been removed. Please try a different URL.');
-            } else if (err.message.includes('Sign in to confirm your age')) {
-                throw new Error('This video is age-restricted and cannot be processed.');
-            } else if (err.message.includes('Sign in to confirm')) {
-                throw new Error('YouTube requires sign-in verification. Please set up YouTube cookies (see README) or try a different video.');
-            } else if (err.message.includes('private video')) {
-                throw new Error('This video is private and cannot be accessed.');
-            } else {
-                throw new Error(`Processing failed: ${err.message}`);
+            
+            // Clean up temp files
+            try {
+                if (fs.existsSync(tempVideoPath)) fs.removeSync(tempVideoPath);
+                if (fs.existsSync(tempVideoPath + '.mp3')) fs.removeSync(tempVideoPath + '.mp3');
+            } catch (cleanupErr) {
+                console.warn('[AudioProcessor] Failed to clean up temp files:', cleanupErr.message);
             }
+            
+            throw err;
         }
     }
 }

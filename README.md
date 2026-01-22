@@ -1,9 +1,13 @@
 # AudioTrackify
 A website that extracts audio from video files, identifies the songs using ACRCloud, and automatically generates a Spotify playlist with the identified tracks.
 
+## YouTube Download Technology
+
+This application uses **yt-dlp**, the most robust and actively maintained YouTube downloader. yt-dlp is significantly more effective at bypassing YouTube's bot detection compared to Node.js libraries like ytdl-core.
+
 ## YouTube Bot Detection Fix
 
-If you're experiencing "Sign in to confirm you're not a bot" errors on cloud servers (Render, Heroku, etc.), you need to provide YouTube cookies for authentication.
+If you're experiencing "Sign in to confirm you're not a bot" errors on cloud servers (Render, Heroku, etc.), you need to provide YouTube cookies for authentication. yt-dlp with cookies provides the most reliable solution.
 
 ### How to Set Up YouTube Cookies
 
@@ -14,7 +18,7 @@ If you're experiencing "Sign in to confirm you're not a bot" errors on cloud ser
 2. **Export YouTube cookies:**
    - Sign in to YouTube in your browser
    - Navigate to `https://www.youtube.com`
-   - Click the extension icon and export cookies
+   - Click the extension icon and export cookies in **Netscape format**
    - Save the file as `youtube-cookies.txt`
 
 3. **Add cookies to your deployment:**
@@ -29,7 +33,7 @@ If you're experiencing "Sign in to confirm you're not a bot" errors on cloud ser
    - The file is git-ignored for security
 
 4. **Cookie format:**
-   The cookie file should contain your YouTube session cookies in Netscape format. The key cookies needed are:
+   The cookie file should be in **Netscape format** (yt-dlp standard). The key cookies needed are:
    - `__Secure-1PSID`
    - `__Secure-3PSID`
    - `VISITOR_INFO1_LIVE`
