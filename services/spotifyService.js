@@ -6,6 +6,7 @@ class SpotifyService {
     this.clientId = process.env.SPOTIFY_CLIENT_ID;
     this.clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
     this.redirectUri = process.env.SPOTIFY_REDIRECT_URI;
+    this.clientUrl = process.env.CLIENT_URL || 'https://audio-trackify.vercel.app';
     this.baseUrl = 'https://api.spotify.com/v1';
     this.authUrl = 'https://accounts.spotify.com/api/token';
     
@@ -43,14 +44,15 @@ class SpotifyService {
     const state = crypto.randomBytes(16).toString('hex');
     const authUrl = this.generateAuthUrl(state);
     
-    // Store state in a cookie
-    res.cookie('spotify_auth_state', state, { 
-      httpOnly: true, 
-      secure: process.env.NODE_ENV === 'production', 
-      sameSite: 'lax', // The key change here
+    // Store state in a cookie with consistent parameters
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 60 * 60 * 1000 // 1 hour
-    });
+    };
     
+    res.cookie('spotify_auth_state', state, cookieOptions);
     res.redirect(authUrl);
   }
 
@@ -61,20 +63,22 @@ class SpotifyService {
     const { code, state, error } = req.query;
     const storedState = req.cookies.spotify_auth_state; // Get state from cookie
     
-    // Get base URL from redirect URI or request
-    const baseUrl = this.getBaseUrl(req);
+    // Use CLIENT_URL for redirects (frontend application)
+    const clientUrl = this.clientUrl;
     
-    // Clear the cookie immediately to prevent replay attacks
-    res.clearCookie('spotify_auth_state', { 
-      httpOnly: true, 
-      secure: process.env.NODE_ENV === 'production', 
-      sameSite: 'lax' 
-    });
+    // Clear the cookie with exact same parameters as when it was set
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+    };
+    
+    res.clearCookie('spotify_auth_state', cookieOptions);
 
-    if (error) return res.redirect(`${baseUrl}/?error=access_denied`);
+    if (error) return res.redirect(`${clientUrl}/?error=access_denied`);
     // Compare the state from the URL with the state from the cookie
     if (!code || !state || state !== storedState) {
-      return res.redirect(`${baseUrl}/?error=invalid_state`);
+      return res.redirect(`${clientUrl}/?error=invalid_state`);
     }
 
     try {
@@ -103,43 +107,15 @@ class SpotifyService {
       req.session.save((err) => {
         if (err) {
           console.error('Session save error:', err);
-          return res.redirect(`${baseUrl}/?error=session_error`);
+          return res.redirect(`${clientUrl}/?error=session_error`);
         }
         console.log('Session saved successfully with sessionID:', sessionId);
-        res.redirect(`${baseUrl}/?auth=success`);
+        res.redirect(`${clientUrl}/?auth=success`);
       });
     } catch (error) {
       console.error('OAuth callback error:', error);
-      res.redirect(`${baseUrl}/?error=auth_failed`);
+      res.redirect(`${clientUrl}/?error=auth_failed`);
     }
-  }
-
-  /**
-   * Get base URL from redirect URI or request
-   */
-  getBaseUrl(req) {
-    // First try to extract from redirect URI (most secure)
-    if (this.redirectUri) {
-      try {
-        const url = new URL(this.redirectUri);
-        return `${url.protocol}//${url.host}`;
-      } catch (e) {
-        console.error('Error parsing redirect URI:', e);
-      }
-    }
-    
-    // Fallback to constructing from request headers
-    const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-    const host = req.headers['x-forwarded-host'] || req.headers.host;
-    
-    // Validate host exists
-    if (!host) {
-      console.error('No host header found in request');
-      // Use a safe fallback - this should never happen in production
-      return 'http://localhost:3000';
-    }
-    
-    return `${protocol}://${host}`;
   }
 
   /**
