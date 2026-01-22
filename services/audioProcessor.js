@@ -1,6 +1,6 @@
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('ffmpeg-static');
-const ytdl = require('ytdl-core');
+const ytdl = require('@distube/ytdl-core');
 const path = require('path');
 const fs = require('fs-extra');
 const { v4: uuidv4 } = require('uuid');
@@ -14,7 +14,10 @@ class AudioProcessor {
         const audioFilePath = path.join(tempDir, `${uuidv4()}.mp3`);
         
         return new Promise((resolve, reject) => {
-            const stream = ytdl(url, { quality: 'highestaudio' });
+            const stream = ytdl(url, { 
+                quality: 'highestaudio',
+                filter: 'audioonly'
+            });
 
             // Error handler for the ytdl stream
             stream.on('error', (err) => {
