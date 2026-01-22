@@ -59,7 +59,7 @@ class AudioTrackifyApp {
         }
     }
 
-    async checkAuthStatusWithRetry(maxRetries = 5, delay = 300) {
+    async checkAuthStatusWithRetry(maxRetries = 5, initialDelay = 300) {
         for (let i = 0; i < maxRetries; i++) {
             try {
                 const response = await fetch('/auth/status');
@@ -70,16 +70,15 @@ class AudioTrackifyApp {
                     this.updateAuthUI(data.user);
                     return; // Success, exit the retry loop
                 }
-                
-                // If not authenticated yet and we have retries left, wait and try again
-                if (i < maxRetries - 1) {
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
             } catch (error) {
                 console.error(`Error checking auth status (attempt ${i + 1}):`, error);
-                if (i < maxRetries - 1) {
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
+            }
+            
+            // Wait before next retry (except on last attempt)
+            if (i < maxRetries - 1) {
+                // Use exponential backoff for better performance
+                const delay = initialDelay * Math.pow(1.5, i);
+                await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
         

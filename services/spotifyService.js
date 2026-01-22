@@ -81,12 +81,7 @@ class SpotifyService {
       // Get user info
       const userInfo = await this.getUserInfo(tokenData.access_token);
       
-      // Initialize session if needed
-      if (!req.session.initialized) {
-        req.session.initialized = true;
-      }
-      
-      // Store tokens
+      // Store tokens using sessionID as key
       const sessionId = req.sessionID || 'default';
       this.userTokens.set(sessionId, {
         ...tokenData,
@@ -95,6 +90,9 @@ class SpotifyService {
         email: userInfo.email,
         timestamp: Date.now()
       });
+
+      // Mark session as authenticated to ensure it gets saved
+      req.session.spotifyAuthenticated = true;
 
       // Save session before redirecting to ensure sessionID is consistent
       req.session.save((err) => {
