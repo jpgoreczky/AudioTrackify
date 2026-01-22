@@ -91,17 +91,7 @@ class SpotifyService {
         timestamp: Date.now()
       });
 
-      // Mark session as authenticated to ensure it gets saved
-      req.session.spotifyAuthenticated = true;
-
-      // Save session before redirecting to ensure sessionID is consistent
-      req.session.save((err) => {
-        if (err) {
-          console.error('Session save error:', err);
-          return res.redirect('/?error=session_error');
-        }
-        res.redirect('/?auth=success');
-      });
+      res.redirect('/?auth=success');
     } catch (error) {
       console.error('OAuth callback error:', error);
       res.redirect('/?error=auth_failed');

@@ -31,8 +31,7 @@ class AudioTrackifyApp {
         
         if (urlParams.get('auth') === 'success') {
             this.showAlert('Successfully connected to Spotify!', 'success');
-            // Add a delay and retry logic to ensure session is established
-            this.checkAuthStatusWithRetry();
+            this.checkAuthStatus();
             // Clean URL
             window.history.replaceState({}, document.title, window.location.pathname);
         } else if (urlParams.has('error')) {
@@ -57,34 +56,6 @@ class AudioTrackifyApp {
         } catch (error) {
             console.error('Error checking auth status:', error);
         }
-    }
-
-    async checkAuthStatusWithRetry(maxRetries = 5, initialDelay = 300) {
-        for (let i = 0; i < maxRetries; i++) {
-            try {
-                const response = await fetch('/auth/status');
-                const data = await response.json();
-                
-                if (data.authenticated) {
-                    this.isAuthenticated = true;
-                    this.updateAuthUI(data.user);
-                    return; // Success, exit the retry loop
-                }
-            } catch (error) {
-                console.error(`Error checking auth status (attempt ${i + 1}):`, error);
-            }
-            
-            // Wait before next retry (except on last attempt)
-            if (i < maxRetries - 1) {
-                // Use exponential backoff for better performance
-                const delay = initialDelay * Math.pow(1.5, i);
-                await new Promise(resolve => setTimeout(resolve, delay));
-            }
-        }
-        
-        // If all retries failed, update UI as not authenticated
-        this.isAuthenticated = false;
-        this.updateAuthUI(null);
     }
 
     updateAuthUI(user) {
