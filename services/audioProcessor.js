@@ -43,15 +43,12 @@ class AudioProcessor {
                 '--output', tempVideoPath,
                 '--no-playlist',
                 '--no-warnings',
-                '--no-check-certificate',
-                '--prefer-insecure',
                 '--add-header', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
                 '--add-header', 'Accept:text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                 '--add-header', 'Accept-Language:en-US,en;q=0.9',
                 '--add-header', 'Sec-Fetch-Dest:document',
                 '--add-header', 'Sec-Fetch-Mode:navigate',
-                '--add-header', 'Sec-Fetch-Site:none',
-                '--no-check-formats'
+                '--add-header', 'Sec-Fetch-Site:none'
             ];
 
             // Add cookies if available
@@ -113,7 +110,7 @@ class AudioProcessor {
                     console.log('[AudioProcessor] yt-dlp download completed');
                     
                     // Find the output file (yt-dlp adds .mp3 extension)
-                    const outputFile = tempVideoPath + '.mp3';
+                    const outputFile = path.join(path.dirname(tempVideoPath), path.basename(tempVideoPath) + '.mp3');
                     
                     if (fs.existsSync(outputFile)) {
                         // Move to final location
@@ -136,7 +133,8 @@ class AudioProcessor {
             // Clean up temp files
             try {
                 if (fs.existsSync(tempVideoPath)) fs.removeSync(tempVideoPath);
-                if (fs.existsSync(tempVideoPath + '.mp3')) fs.removeSync(tempVideoPath + '.mp3');
+                const outputFile = path.join(path.dirname(tempVideoPath), path.basename(tempVideoPath) + '.mp3');
+                if (fs.existsSync(outputFile)) fs.removeSync(outputFile);
             } catch (cleanupErr) {
                 console.warn('[AudioProcessor] Failed to clean up temp files:', cleanupErr.message);
             }
