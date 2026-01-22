@@ -9,6 +9,20 @@ const { v4: uuidv4 } = require('uuid');
 // This part is crucial and should remain
 ffmpeg.setFfmpegPath(ffmpegPath);
 
+// Create an agent to use cookies if available
+let agent;
+try {
+    // Try to use cookies from environment variable or file if available
+    const cookiesPath = process.env.YOUTUBE_COOKIES_PATH || path.join(__dirname, '..', 'youtube-cookies.txt');
+    if (fs.existsSync(cookiesPath)) {
+        const cookiesContent = fs.readFileSync(cookiesPath, 'utf8');
+        console.log('[AudioProcessor] Using YouTube cookies for authentication');
+        // Note: @distube/ytdl-core can use cookies directly in options
+    }
+} catch (err) {
+    console.log('[AudioProcessor] No YouTube cookies found, continuing without authentication');
+}
+
 class AudioProcessor {
     async downloadAndExtractAudio(url, tempDir) {
         const audioFilePath = path.join(tempDir, `${uuidv4()}.mp3`);
@@ -24,9 +38,36 @@ class AudioProcessor {
         console.log('[AudioProcessor] URL validation passed');
         
         try {
+            // Enhanced options to bypass bot detection
+            const ytdlOptions = {
+                requestOptions: {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Connection': 'keep-alive',
+                        'Upgrade-Insecure-Requests': '1',
+                        'Sec-Fetch-Dest': 'document',
+                        'Sec-Fetch-Mode': 'navigate',
+                        'Sec-Fetch-Site': 'none',
+                        'Sec-Fetch-User': '?1',
+                        'Cache-Control': 'max-age=0'
+                    }
+                }
+            };
+
+            // Add cookies if available
+            const cookiesPath = process.env.YOUTUBE_COOKIES_PATH || path.join(__dirname, '..', 'youtube-cookies.txt');
+            if (fs.existsSync(cookiesPath)) {
+                const cookiesContent = fs.readFileSync(cookiesPath, 'utf8');
+                ytdlOptions.requestOptions.headers.Cookie = cookiesContent.trim();
+                console.log('[AudioProcessor] Using cookies for request');
+            }
+            
             // Get video info first to verify access
             console.log('[AudioProcessor] Fetching video info...');
-            const info = await ytdl.getInfo(url);
+            const info = await ytdl.getInfo(url, ytdlOptions);
             console.log('[AudioProcessor] Video info retrieved:', {
                 title: info.videoDetails.title,
                 lengthSeconds: info.videoDetails.lengthSeconds,
@@ -35,15 +76,13 @@ class AudioProcessor {
             
             // Create download stream with enhanced options
             console.log('[AudioProcessor] Creating download stream...');
-            const stream = ytdl(url, { 
+            const streamOptions = {
+                ...ytdlOptions,
                 quality: 'highestaudio',
-                filter: 'audioonly',
-                requestOptions: {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-                    }
-                }
-            });
+                filter: 'audioonly'
+            };
+            
+            const stream = ytdl(url, streamOptions);
 
             return new Promise((resolve, reject) => {
                 let lastLoggedPercent = 0;
@@ -55,10 +94,14 @@ class AudioProcessor {
                         statusCode: err.statusCode,
                         stack: err.stack
                     });
+                    
+                    // Enhanced error messages for bot detection
                     if (err.statusCode === 410) {
-                        reject(new Error('Input video not found or has been removed. Please try a different URL.'));
+                        reject(new Error('YouTube detected automated access. This may be due to: 1) Cloud server IP being blocked, 2) Missing YouTube cookies. See README for cookie setup instructions.'));
                     } else if (err.statusCode === 429 || err.message.includes('Too Many Requests')) {
-                        reject(new Error('YouTube is rate limiting requests. Please try again in a few minutes.'));
+                        reject(new Error('YouTube is rate limiting requests. Please try again in a few minutes or set up YouTube cookies for authentication.'));
+                    } else if (err.message.includes('Sign in to confirm')) {
+                        reject(new Error('YouTube requires sign-in verification. Please set up YouTube cookies (see README) or try a different video.'));
                     } else {
                         reject(new Error(`Failed to download video: ${err.message}`));
                     }
@@ -116,6 +159,8 @@ class AudioProcessor {
                 throw new Error('Input video not found or has been removed. Please try a different URL.');
             } else if (err.message.includes('Sign in to confirm your age')) {
                 throw new Error('This video is age-restricted and cannot be processed.');
+            } else if (err.message.includes('Sign in to confirm')) {
+                throw new Error('YouTube requires sign-in verification. Please set up YouTube cookies (see README) or try a different video.');
             } else if (err.message.includes('private video')) {
                 throw new Error('This video is private and cannot be accessed.');
             } else {

@@ -93,3 +93,7 @@ bin/
 
 # Backup files
 *.backup
+
+# YouTube cookies (sensitive authentication data)
+youtube-cookies.txt
+*cookies.txt
