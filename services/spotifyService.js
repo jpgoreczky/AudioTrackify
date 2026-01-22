@@ -61,6 +61,9 @@ class SpotifyService {
     const { code, state, error } = req.query;
     const storedState = req.cookies.spotify_auth_state; // Get state from cookie
     
+    // Get base URL from redirect URI or request
+    const baseUrl = this.getBaseUrl(req);
+    
     // Clear the cookie immediately to prevent replay attacks
     res.clearCookie('spotify_auth_state', { 
       httpOnly: true, 
@@ -68,10 +71,10 @@ class SpotifyService {
       sameSite: 'lax' 
     });
 
-    if (error) return res.redirect('/?error=access_denied');
+    if (error) return res.redirect(`${baseUrl}/?error=access_denied`);
     // Compare the state from the URL with the state from the cookie
     if (!code || !state || state !== storedState) {
-      return res.redirect('/?error=invalid_state');
+      return res.redirect(`${baseUrl}/?error=invalid_state`);
     }
 
     try {
@@ -100,15 +103,35 @@ class SpotifyService {
       req.session.save((err) => {
         if (err) {
           console.error('Session save error:', err);
-          return res.redirect('/?error=session_error');
+          return res.redirect(`${baseUrl}/?error=session_error`);
         }
         console.log('Session saved successfully with sessionID:', sessionId);
-        res.redirect('/?auth=success');
+        res.redirect(`${baseUrl}/?auth=success`);
       });
     } catch (error) {
       console.error('OAuth callback error:', error);
-      res.redirect('/?error=auth_failed');
+      res.redirect(`${baseUrl}/?error=auth_failed`);
     }
+  }
+
+  /**
+   * Get base URL from redirect URI or request
+   */
+  getBaseUrl(req) {
+    // First try to extract from redirect URI
+    if (this.redirectUri) {
+      try {
+        const url = new URL(this.redirectUri);
+        return `${url.protocol}//${url.host}`;
+      } catch (e) {
+        console.error('Error parsing redirect URI:', e);
+      }
+    }
+    
+    // Fallback to constructing from request
+    const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    return `${protocol}://${host}`;
   }
 
   /**
