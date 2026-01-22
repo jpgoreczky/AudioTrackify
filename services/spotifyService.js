@@ -87,6 +87,7 @@ class SpotifyService {
       
       // Store tokens using sessionID as key
       const sessionId = req.sessionID || 'default';
+      console.log('Storing tokens for sessionID:', sessionId);
       this.userTokens.set(sessionId, {
         ...tokenData,
         userId: userInfo.id,
@@ -95,7 +96,15 @@ class SpotifyService {
         timestamp: Date.now()
       });
 
-      res.redirect('/?auth=success');
+      // Save session explicitly before redirecting to ensure sessionID is consistent
+      req.session.save((err) => {
+        if (err) {
+          console.error('Session save error:', err);
+          return res.redirect('/?error=session_error');
+        }
+        console.log('Session saved successfully with sessionID:', sessionId);
+        res.redirect('/?auth=success');
+      });
     } catch (error) {
       console.error('OAuth callback error:', error);
       res.redirect('/?error=auth_failed');
@@ -148,7 +157,9 @@ class SpotifyService {
    */
   getAuthStatus(req, res) {
     const sessionId = req.sessionID || 'default';
+    console.log('Checking auth status for sessionID:', sessionId);
     const tokenData = this.userTokens.get(sessionId);
+    console.log('Token data found:', !!tokenData);
 
     if (tokenData) {
       res.json({
