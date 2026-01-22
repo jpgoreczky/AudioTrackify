@@ -6,11 +6,24 @@ class SpotifyService {
     this.clientId = process.env.SPOTIFY_CLIENT_ID;
     this.clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
     this.redirectUri = process.env.SPOTIFY_REDIRECT_URI;
+    this.clientUrl = process.env.CLIENT_URL || 'https://audio-trackify.vercel.app';
     this.baseUrl = 'https://api.spotify.com/v1';
     this.authUrl = 'https://accounts.spotify.com/api/token';
     
     // In-memory storage for tokens
     this.userTokens = new Map();
+  }
+
+  /**
+   * Get cookie options for consistent configuration
+   */
+  getCookieOptions() {
+    return {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 60 * 60 * 1000 // 1 hour
+    };
   }
 
   /**
@@ -43,14 +56,8 @@ class SpotifyService {
     const state = crypto.randomBytes(16).toString('hex');
     const authUrl = this.generateAuthUrl(state);
     
-    // Store state in a cookie
-    res.cookie('spotify_auth_state', state, { 
-      httpOnly: true, 
-      secure: process.env.NODE_ENV === 'production', 
-      sameSite: 'lax', // The key change here
-      maxAge: 60 * 60 * 1000 // 1 hour
-    });
-    
+    // Store state in a cookie with consistent parameters
+    res.cookie('spotify_auth_state', state, this.getCookieOptions());
     res.redirect(authUrl);
   }
 
@@ -61,17 +68,16 @@ class SpotifyService {
     const { code, state, error } = req.query;
     const storedState = req.cookies.spotify_auth_state; // Get state from cookie
     
-    // Clear the cookie immediately to prevent replay attacks
-    res.clearCookie('spotify_auth_state', { 
-      httpOnly: true, 
-      secure: process.env.NODE_ENV === 'production', 
-      sameSite: 'lax' 
-    });
+    // Use CLIENT_URL for redirects (frontend application)
+    const clientUrl = this.clientUrl;
+    
+    // Clear the cookie with exact same parameters as when it was set
+    res.clearCookie('spotify_auth_state', this.getCookieOptions());
 
-    if (error) return res.redirect('/?error=access_denied');
+    if (error) return res.redirect(`${clientUrl}/?error=access_denied`);
     // Compare the state from the URL with the state from the cookie
     if (!code || !state || state !== storedState) {
-      return res.redirect('/?error=invalid_state');
+      return res.redirect(`${clientUrl}/?error=invalid_state`);
     }
 
     try {
@@ -81,8 +87,13 @@ class SpotifyService {
       // Get user info
       const userInfo = await this.getUserInfo(tokenData.access_token);
       
+      // Mark session as authenticated to ensure session gets created/saved
+      // This ensures sessionID remains consistent across requests
+      req.session.spotifyUserId = userInfo.id;
+      
       // Store tokens using sessionID as key
       const sessionId = req.sessionID || 'default';
+      console.log('Storing tokens for sessionID:', sessionId);
       this.userTokens.set(sessionId, {
         ...tokenData,
         userId: userInfo.id,
@@ -91,20 +102,18 @@ class SpotifyService {
         timestamp: Date.now()
       });
 
-      // Mark session as authenticated to ensure it gets saved
-      req.session.spotifyAuthenticated = true;
-
-      // Save session before redirecting to ensure sessionID is consistent
+      // Save session explicitly before redirecting to ensure sessionID is consistent
       req.session.save((err) => {
         if (err) {
           console.error('Session save error:', err);
-          return res.redirect('/?error=session_error');
+          return res.redirect(`${clientUrl}/?error=session_error`);
         }
-        res.redirect('/?auth=success');
+        console.log('Session saved successfully with sessionID:', sessionId);
+        res.redirect(`${clientUrl}/?auth=success`);
       });
     } catch (error) {
       console.error('OAuth callback error:', error);
-      res.redirect('/?error=auth_failed');
+      res.redirect(`${clientUrl}/?error=auth_failed`);
     }
   }
 
@@ -154,7 +163,9 @@ class SpotifyService {
    */
   getAuthStatus(req, res) {
     const sessionId = req.sessionID || 'default';
+    console.log('Checking auth status for sessionID:', sessionId);
     const tokenData = this.userTokens.get(sessionId);
+    console.log('Token data found:', !!tokenData);
 
     if (tokenData) {
       res.json({

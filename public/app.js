@@ -6,6 +6,11 @@ class AudioTrackifyApp {
         this.selectedTracks = new Set();
         this.isAuthenticated = false;
         
+        // Backend API URL - configure based on environment
+        this.API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:3000'
+            : 'https://audiotrackify.onrender.com';
+        
         this.initializeEventListeners();
         this.checkAuthStatus();
         this.checkUrlParams();
@@ -31,8 +36,9 @@ class AudioTrackifyApp {
         
         if (urlParams.get('auth') === 'success') {
             this.showAlert('Successfully connected to Spotify!', 'success');
-            // Add a delay and retry logic to ensure session is established
-            this.checkAuthStatusWithRetry();
+            // Add delay to ensure session cookie is set before checking auth
+            // Increased to 500ms to ensure session is fully saved
+            setTimeout(() => this.checkAuthStatus(), 500);
             // Clean URL
             window.history.replaceState({}, document.title, window.location.pathname);
         } else if (urlParams.has('error')) {
@@ -44,7 +50,9 @@ class AudioTrackifyApp {
 
     async checkAuthStatus() {
         try {
-            const response = await fetch('/auth/status');
+            const response = await fetch(`${this.API_URL}/auth/status`, {
+                credentials: 'include'
+            });
             const data = await response.json();
             
             if (data.authenticated) {
@@ -57,34 +65,6 @@ class AudioTrackifyApp {
         } catch (error) {
             console.error('Error checking auth status:', error);
         }
-    }
-
-    async checkAuthStatusWithRetry(maxRetries = 5, initialDelay = 300) {
-        for (let i = 0; i < maxRetries; i++) {
-            try {
-                const response = await fetch('/auth/status');
-                const data = await response.json();
-                
-                if (data.authenticated) {
-                    this.isAuthenticated = true;
-                    this.updateAuthUI(data.user);
-                    return; // Success, exit the retry loop
-                }
-            } catch (error) {
-                console.error(`Error checking auth status (attempt ${i + 1}):`, error);
-            }
-            
-            // Wait before next retry (except on last attempt)
-            if (i < maxRetries - 1) {
-                // Use exponential backoff for better performance
-                const delay = initialDelay * Math.pow(1.5, i);
-                await new Promise(resolve => setTimeout(resolve, delay));
-            }
-        }
-        
-        // If all retries failed, update UI as not authenticated
-        this.isAuthenticated = false;
-        this.updateAuthUI(null);
     }
 
     updateAuthUI(user) {
@@ -114,7 +94,7 @@ class AudioTrackifyApp {
     }
 
     handleSpotifyAuth() {
-        window.location.href = '/auth/spotify';
+        window.location.href = `${this.API_URL}/auth/spotify`;
     }
 
     async handleFileUpload(e) {
@@ -140,8 +120,9 @@ class AudioTrackifyApp {
             this.showProgress();
             this.updateProgress(10, 'Uploading file...');
             
-            const response = await fetch('/upload', {
+            const response = await fetch(`${this.API_URL}/upload`, {
                 method: 'POST',
+                credentials: 'include',
                 body: formData
             });
             
@@ -174,11 +155,12 @@ class AudioTrackifyApp {
             this.showProgress();
             this.updateProgress(10, 'Starting URL processing...');
             
-            const response = await fetch('/process-url', {
+            const response = await fetch(`${this.API_URL}/process-url`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
+                credentials: 'include',
                 body: JSON.stringify({ url })
             });
             
@@ -201,7 +183,9 @@ class AudioTrackifyApp {
         if (!this.currentJobId) return;
         
         try {
-            const response = await fetch(`/status/${this.currentJobId}`);
+            const response = await fetch(`${this.API_URL}/status/${this.currentJobId}`, {
+                credentials: 'include'
+            });
             const status = await response.json();
             
             switch (status.status) {
@@ -417,11 +401,12 @@ class AudioTrackifyApp {
             confirmBtn.disabled = true;
             confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creating...';
             
-            const response = await fetch('/create-playlist', {
+            const response = await fetch(`${this.API_URL}/create-playlist`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
+                credentials: 'include',
                 body: JSON.stringify({
                     tracks: selectedTracksArray,
                     playlistName: playlistName
