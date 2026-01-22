@@ -15,6 +15,18 @@ class SpotifyService {
   }
 
   /**
+   * Get cookie options for consistent configuration
+   */
+  getCookieOptions() {
+    return {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 60 * 60 * 1000 // 1 hour
+    };
+  }
+
+  /**
    * Generate authorization URL for Spotify OAuth
    */
   generateAuthUrl(state) {
@@ -45,14 +57,7 @@ class SpotifyService {
     const authUrl = this.generateAuthUrl(state);
     
     // Store state in a cookie with consistent parameters
-    const cookieOptions = {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 60 * 60 * 1000 // 1 hour
-    };
-    
-    res.cookie('spotify_auth_state', state, cookieOptions);
+    res.cookie('spotify_auth_state', state, this.getCookieOptions());
     res.redirect(authUrl);
   }
 
@@ -67,13 +72,7 @@ class SpotifyService {
     const clientUrl = this.clientUrl;
     
     // Clear the cookie with exact same parameters as when it was set
-    const cookieOptions = {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
-    };
-    
-    res.clearCookie('spotify_auth_state', cookieOptions);
+    res.clearCookie('spotify_auth_state', this.getCookieOptions());
 
     if (error) return res.redirect(`${clientUrl}/?error=access_denied`);
     // Compare the state from the URL with the state from the cookie
