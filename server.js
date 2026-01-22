@@ -22,6 +22,7 @@ app.use(cors({
     if (!origin) return callback(null, true);
     const allowedOrigins = [
       'https://audio-trackify.vercel.app',
+      'https://audiotrackify.onrender.com',
       'http://localhost:3000',
       'http://127.0.0.1:3000'
     ];
@@ -42,7 +43,7 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 24 * 60 * 60 * 1000
   }
 }));

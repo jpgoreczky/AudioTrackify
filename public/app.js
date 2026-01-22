@@ -6,6 +6,11 @@ class AudioTrackifyApp {
         this.selectedTracks = new Set();
         this.isAuthenticated = false;
         
+        // Backend API URL - configure based on environment
+        this.API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:3000'
+            : 'https://audiotrackify.onrender.com';
+        
         this.initializeEventListeners();
         this.checkAuthStatus();
         this.checkUrlParams();
@@ -45,7 +50,9 @@ class AudioTrackifyApp {
 
     async checkAuthStatus() {
         try {
-            const response = await fetch('/auth/status');
+            const response = await fetch(`${this.API_URL}/auth/status`, {
+                credentials: 'include'
+            });
             const data = await response.json();
             
             if (data.authenticated) {
@@ -87,7 +94,7 @@ class AudioTrackifyApp {
     }
 
     handleSpotifyAuth() {
-        window.location.href = '/auth/spotify';
+        window.location.href = `${this.API_URL}/auth/spotify`;
     }
 
     async handleFileUpload(e) {
@@ -113,8 +120,9 @@ class AudioTrackifyApp {
             this.showProgress();
             this.updateProgress(10, 'Uploading file...');
             
-            const response = await fetch('/upload', {
+            const response = await fetch(`${this.API_URL}/upload`, {
                 method: 'POST',
+                credentials: 'include',
                 body: formData
             });
             
@@ -147,11 +155,12 @@ class AudioTrackifyApp {
             this.showProgress();
             this.updateProgress(10, 'Starting URL processing...');
             
-            const response = await fetch('/process-url', {
+            const response = await fetch(`${this.API_URL}/process-url`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
+                credentials: 'include',
                 body: JSON.stringify({ url })
             });
             
@@ -174,7 +183,9 @@ class AudioTrackifyApp {
         if (!this.currentJobId) return;
         
         try {
-            const response = await fetch(`/status/${this.currentJobId}`);
+            const response = await fetch(`${this.API_URL}/status/${this.currentJobId}`, {
+                credentials: 'include'
+            });
             const status = await response.json();
             
             switch (status.status) {
@@ -390,11 +401,12 @@ class AudioTrackifyApp {
             confirmBtn.disabled = true;
             confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creating...';
             
-            const response = await fetch('/create-playlist', {
+            const response = await fetch(`${this.API_URL}/create-playlist`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
+                credentials: 'include',
                 body: JSON.stringify({
                     tracks: selectedTracksArray,
                     playlistName: playlistName
